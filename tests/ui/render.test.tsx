@@ -15,6 +15,7 @@ import { AdminStudentsPage } from '../../src/pages/admin/StudentsPage'
 import { AdminStudentDetailPage } from '../../src/pages/admin/StudentDetailPage'
 import { AdminTestsPage } from '../../src/pages/admin/TestsPage'
 import { TestBuilderPage } from '../../src/pages/admin/TestBuilderPage'
+import { AnswerKeysPage } from '../../src/pages/admin/AnswerKeysPage'
 import { AdminAssignmentsPage } from '../../src/pages/admin/AssignmentsPage'
 import { AdminResultsPage } from '../../src/pages/admin/ResultsPage'
 import { AdminResultDetailPage } from '../../src/pages/admin/ResultDetailPage'
@@ -92,6 +93,12 @@ const pages: PageCase[] = [
     url: '/admin/tests/22222222-2222-4222-8222-222222222222/edit',
     pattern: '/admin/tests/:id/edit',
     element: <TestBuilderPage />,
+  },
+  {
+    name: 'answer keys',
+    url: '/admin/tests/22222222-2222-4222-8222-222222222222/keys',
+    pattern: '/admin/tests/:id/keys',
+    element: <AnswerKeysPage />,
   },
   {
     name: 'admin assignments',

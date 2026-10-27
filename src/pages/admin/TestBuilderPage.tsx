@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Eye,
   FileText,
+  KeyRound,
   Layers,
   Lock,
   MoreHorizontal,
@@ -15,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { PageHeader, Badge, Panel } from '../../components/ui/Misc'
-import { Button, IconButton } from '../../components/ui/Button'
+import { Button, ButtonLink, IconButton } from '../../components/ui/Button'
 import { Alert, EmptyState, ErrorState, LoadingState } from '../../components/ui/Feedback'
 import { Field, Input, Textarea, Toggle } from '../../components/ui/Form'
 import { ConfirmDialog } from '../../components/ui/Modal'
@@ -395,7 +396,11 @@ export function TestBuilderPage() {
     }
   }, [test, meta, computedMax, sections])
 
-  if (loading) {
+  // Only replace the page with the loader on the first load. Reloads after a
+  // save keep the builder mounted so the scroll position is preserved.
+  const hasCurrentTest = Boolean(test && test.id === id)
+
+  if (loading && !hasCurrentTest) {
     return (
       <div>
         <PageHeader backTo="/admin/tests" backLabel="Tests" title="Loading test…" />
@@ -431,6 +436,13 @@ export function TestBuilderPage() {
         }
         actions={
           <>
+            <ButtonLink
+              to={`/admin/tests/${test.id}/keys`}
+              variant="outline"
+              leftIcon={<KeyRound className="h-4 w-4" />}
+            >
+              Answer keys
+            </ButtonLink>
             <Button
               variant="outline"
               leftIcon={<Eye className="h-4 w-4" />}

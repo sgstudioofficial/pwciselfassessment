@@ -52,6 +52,11 @@ const TestBuilderPage = lazy(() =>
     default: module.TestBuilderPage,
   })),
 )
+const AnswerKeysPage = lazy(() =>
+  import('./pages/admin/AnswerKeysPage').then((module) => ({
+    default: module.AnswerKeysPage,
+  })),
+)
 const AdminAssignmentsPage = lazy(() =>
   import('./pages/admin/AssignmentsPage').then((module) => ({
     default: module.AdminAssignmentsPage,
@@ -165,6 +170,7 @@ export default function App() {
                 <Route path="students/:id" element={<AdminStudentDetailPage />} />
                 <Route path="tests" element={<AdminTestsPage />} />
                 <Route path="tests/:id/edit" element={<TestBuilderPage />} />
+                <Route path="tests/:id/keys" element={<AnswerKeysPage />} />
                 <Route path="assignments" element={<AdminAssignmentsPage />} />
                 <Route path="results" element={<AdminResultsPage />} />
                 <Route
