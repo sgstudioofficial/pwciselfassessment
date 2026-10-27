@@ -1,0 +1,50 @@
+# Supabase CLI configuration for Meridian.
+# Update project_id if you link a hosted project with a different ref.
+
+project_id = "meridian-assessments"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = [
+  "http://localhost:5173/login",
+  "http://localhost:5173/reset-password"
+]
+jwt_expiry = 3600
+enable_signup = false
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = false
+enable_confirmations = false
+
+[storage]
+enabled = true
+file_size_limit = "5MiB"
+
+[functions.student-login]
+verify_jwt = false
+
+[functions.notify-submission]
+verify_jwt = false
+
+[functions.admin-students]
+verify_jwt = true
