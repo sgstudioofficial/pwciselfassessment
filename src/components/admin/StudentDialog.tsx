@@ -7,6 +7,7 @@ import { Alert } from '../ui/Feedback'
 import { Field, Input } from '../ui/Form'
 import { useToast } from '../../context/ToastContext'
 import { getErrorMessage } from '../../lib/errors'
+import { isValidEmail } from '../../lib/email'
 import { invokeEdge, supabase } from '../../lib/supabase'
 import { copyToClipboard } from '../../lib/clipboard'
 import type { Profile } from '../../lib/types'
@@ -74,6 +75,11 @@ export function StudentDialog({
     if (!USERNAME_PATTERN.test(username.trim().toLowerCase())) {
       return setError(
         'Username must be 3–32 characters: lowercase letters, numbers, dots, dashes or underscores.',
+      )
+    }
+    if (email.trim() && !isValidEmail(email)) {
+      return setError(
+        'Enter a valid email address, or leave the field blank to use an internal student address.',
       )
     }
     if (password && (password.length < 10 || password.length > 72)) {

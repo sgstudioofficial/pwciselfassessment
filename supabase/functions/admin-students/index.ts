@@ -14,7 +14,10 @@ import {
 } from '../_shared/http.ts'
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// Mirrors isValidEmail() in src/lib/email.ts. GoTrue rejects consecutive dots,
+// trailing dots and hyphen-leading domain labels, so catch them before the call.
+const EMAIL_PATTERN =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -175,7 +178,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
           409,
         )
       }
-      console.error('admin-students: createUser failed', message)
+      if (/unable to validate email/i.test(message)) {
+        return errorResponse(req, 'Enter a valid email address.', 422)
+      }
+      if (/password/i.test(message)) {
+        return errorResponse(
+          req,
+          'Supabase rejected that password. Choose a different one, or leave the field blank to generate one.',
+          422,
+        )
+      }
+      console.error('admin-students: createUser failed', email, message)
       return errorResponse(req, 'Could not create the account.', 500)
     }
 
