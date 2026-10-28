@@ -12,6 +12,7 @@ import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, invokeEdge, supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 import { getErrorMessage } from '../lib/errors'
+import { readSessionId } from '../lib/session'
 import { useToast } from './ToastContext'
 
 type AuthContextValue = {
@@ -34,6 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured)
   const profileUserIdRef = useRef<string | null>(null)
   const mountedRef = useRef(true)
+  // False until the current session has been offered to the database. The
+  // poller waits for this so a page load cannot sign itself out before the
+  // adoption call has finished.
+  const sessionRegisteredRef = useRef(false)
 
   const loadProfile = useCallback(async (userId: string): Promise<Profile> => {
     const { data, error } = await supabase
@@ -71,6 +76,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profileUserIdRef.current = null
   }, [])
 
+  /**
+   * Stores this browser's session id on the profile. `force` is true on an
+   * explicit sign-in (take the account over) and false on page load (adopt only
+   * if no session has been registered yet).
+   */
+  const registerSession = useCallback(
+    async (accessToken: string | null | undefined, force: boolean) => {
+      const sessionId = readSessionId(accessToken)
+      if (!sessionId) return
+      sessionRegisteredRef.current = false
+      try {
+        const { error } = await supabase.rpc('register_active_session', {
+          p_session_id: sessionId,
+          p_force: force,
+        })
+        if (error) console.warn('Could not register this session:', error.message)
+      } finally {
+        sessionRegisteredRef.current = true
+      }
+    },
+    [],
+  )
+
+  const closeSupersededSession = useCallback(async () => {
+    // Local scope only: the newer device owns the account and must keep its
+    // tokens. Signing out globally would revoke the session that just won.
+    await supabase.auth.signOut({ scope: 'local' })
+    setProfile(null)
+    setSession(null)
+    profileUserIdRef.current = null
+    toast.error(
+      'Signed out',
+      'This account signed in on another device, so this session was closed.',
+    )
+  }, [toast])
+
   const refreshProfile = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
     if (!data.session) {
@@ -92,6 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       try {
         const { data } = await supabase.auth.getSession()
+        if (!mountedRef.current) return
+        // Adopt this session only when the account has none registered yet, so
+        // a reload cannot take the account back from a newer sign-in.
+        if (data.session) await registerSession(data.session.access_token, false)
         if (!mountedRef.current) return
         setSession(data.session)
 
@@ -149,7 +194,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false
       subscription.unsubscribe()
     }
-  }, [loadProfile, toast])
+  }, [loadProfile, registerSession, toast])
+
+  const sessionId = useMemo(
+    () => readSessionId(session?.access_token),
+    [session?.access_token],
+  )
+
+  // Single-session enforcement. The newest sign-in owns the account; every
+  // other browser notices within 20 s (or on focus) and signs itself out.
+  useEffect(() => {
+    if (!sessionId || !isSupabaseConfigured) return
+
+    let cancelled = false
+    let checking = false
+
+    const check = async () => {
+      if (cancelled || checking || !sessionRegisteredRef.current) return
+      checking = true
+      try {
+        const { data, error } = await supabase.rpc('is_active_session', {
+          p_session_id: sessionId,
+        })
+        if (cancelled || error) return
+        if (data === false) {
+          cancelled = true
+          await closeSupersededSession()
+        }
+      } catch {
+        // Transient failure: keep the session and retry on the next tick.
+      } finally {
+        checking = false
+      }
+    }
+
+    const interval = window.setInterval(() => void check(), 20_000)
+    const onFocus = () => void check()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void check()
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [sessionId, closeSupersededSession])
 
   const signInAdmin = useCallback(
     async (email: string, password: string): Promise<Profile> => {
@@ -161,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(getErrorMessage(error ?? new Error('Sign in failed.')))
       }
 
+      await registerSession(data.session.access_token, true)
       setSession(data.session)
       const nextProfile = await loadProfile(data.user.id)
       if (nextProfile.role !== 'admin') {
@@ -171,7 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return nextProfile
     },
-    [loadProfile],
+    [loadProfile, registerSession],
   )
 
   const signInStudent = useCallback(
@@ -190,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       if (error) throw new Error(getErrorMessage(error))
 
+      await registerSession(data.session.access_token, true)
       setSession(data.session)
       const nextProfile = await loadProfile(data.session.user.id)
       if (nextProfile.role !== 'student') {
@@ -200,7 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return nextProfile
     },
-    [loadProfile],
+    [loadProfile, registerSession],
   )
 
   const value = useMemo<AuthContextValue>(
