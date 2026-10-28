@@ -157,6 +157,26 @@ through the service-role REST API and then checked in the browser:
 The banks remain **draft and unassigned**; their keys are placeholders and must
 be replaced before publishing.
 
+### Hosted deployment: Edge Function CORS (live project)
+
+- Calling `POST /functions/v1/admin-students` from the live project without a
+  token returns `401 Missing authorization header`, so the function is deployed
+  and reachable — the failure was not a missing deployment.
+- The preflight (`OPTIONS`) answered **every** origin with
+  `Access-Control-Allow-Origin: http://localhost:5173`, because `ALLOWED_ORIGIN`
+  was set to the local dev origin. A browser on the hosted site therefore blocks
+  the request, and supabase-js reports *Failed to send a request to the Edge
+  Function* — which is exactly what **Add student** showed. `student-login` is
+  restricted by the same setting, so student sign-in on the hosted site fails
+  the same way.
+- The shared CORS helper now accepts a comma-separated allowlist, echoes the
+  matching origin, and omits the header entirely for unlisted origins. Verified
+  with a Node harness against the real helper: unset → `*`; listed origin →
+  echoed; unlisted origin → no header; trailing slash normalised; preflight for
+  an unlisted origin returns `204` without `Access-Control-Allow-Origin`.
+- Remaining manual step (needs project access): set `ALLOWED_ORIGIN` to the
+  hosted origin(s) and redeploy the three functions.
+
 ### Test deletion (live project)
 
 - `delete_test()` was applied to the live project and called with a real admin

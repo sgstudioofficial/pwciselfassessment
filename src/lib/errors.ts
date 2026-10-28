@@ -52,6 +52,11 @@ function friendly(message: string): string {
       replacement: 'The data did not pass validation. Check the fields and try again.',
     },
     {
+      pattern: /failed to send a request to the edge function/i,
+      replacement:
+        'Could not reach the server function. It may not be deployed, or its ALLOWED_ORIGIN does not include this site.',
+    },
+    {
       pattern: /failed to fetch|networkerror|load failed/i,
       replacement:
         'Could not reach the server. Check your connection and try again.',

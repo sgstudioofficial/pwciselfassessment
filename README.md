@@ -490,7 +490,7 @@ Set the secret:
 
 ```bash
 supabase secrets set NOTIFY_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-supabase secrets set ALLOWED_ORIGIN="https://assessments.company.com"
+supabase secrets set ALLOWED_ORIGIN="https://assessments.company.com,http://localhost:5173"
 supabase secrets set STUDENT_EMAIL_DOMAIN="students.company.com"
 ```
 
@@ -579,19 +579,32 @@ application in hPanel.
    - **Site URL:** `https://assessments.example.com`
    - **Redirect URLs:** `https://assessments.example.com/login` and
      `https://assessments.example.com/reset-password`
-6. **Allow the origin in the Edge Functions.** The CORS helper compares against a
-   single exact origin:
+6. **Allow the origin in the Edge Functions.** `ALLOWED_ORIGIN` takes a
+   comma-separated list, so the deployed site and the local dev server can both
+   call the functions:
 
    ```bash
-   supabase secrets set ALLOWED_ORIGIN="https://assessments.example.com"
+   supabase secrets set ALLOWED_ORIGIN="https://assessments.example.com,http://localhost:5173"
    supabase functions deploy student-login --no-verify-jwt
    supabase functions deploy admin-students
    supabase functions deploy notify-submission --no-verify-jwt
    ```
 
-   While `ALLOWED_ORIGIN` points at production, browser calls from
-   `http://localhost:5173` are blocked by CORS. Point it back at the local origin
-   (or unset it) when developing, and set it again before deploying.
+   The origin must match exactly (scheme + host + port, no trailing slash). A
+   request from an origin that is not on the list gets no
+   `Access-Control-Allow-Origin` header, so the browser blocks it and the app
+   reports *Could not reach the server function*. That message almost always
+   means the deployed site's origin is missing from `ALLOWED_ORIGIN`, or the
+   function was never deployed. Redeploy the functions after changing the shared
+   CORS helper, and check with:
+
+   ```bash
+   curl -i -X OPTIONS https://<project-ref>.supabase.co/functions/v1/admin-students \
+     -H "Origin: https://assessments.example.com" \
+     -H "Access-Control-Request-Method: POST"
+   ```
+
+   The response must echo your site origin in `Access-Control-Allow-Origin`.
 
 Re-deploying an update is step 2–3 only: rebuild, replace the files in the
 document root, and keep `.htaccess`. Asset filenames are hashed and cached
@@ -659,6 +672,7 @@ is already secured by RLS.
 | Setup screen instead of login | `.env.local` missing or values still placeholders; restart `npm run dev`. |
 | `student-login` returns 404/401 | Deploy with `--no-verify-jwt`; verify `SUPABASE_URL` and functions are deployed. |
 | Admin cannot invite students | Edge Function `admin-students` not deployed or caller profile is not an active admin. |
+| "Could not reach the server function" | The hosted site's origin is missing from `ALLOWED_ORIGIN` (or the function is not deployed). Set it to the exact site origin, redeploy, and confirm the preflight echoes that origin. |
 | "Only published tests can be assigned" | Publish the test first; publishing validates sections, questions and marks. |
 | "This test already has attempts…" | Structure/timing is frozen after the first attempt. Duplicate the test. |
 | Delete test is missing | Tests with student attempts must be archived to keep their results. Only tests with zero attempts show the delete action. |
@@ -666,7 +680,7 @@ is already secured by RLS.
 | Answer keys visible in preview only | Correct behaviour: admin preview shows keys; students only receive key-free RPC payloads. |
 | Reset email never arrives | Students have internal emails; use admin password reset. For admins configure custom SMTP and Auth redirect URLs. |
 | Autosave interrupted | Check network/Edge API availability; saved answers survive refresh and retry on the next edit or submit. |
-| CORS error on Edge Function | Set `ALLOWED_ORIGIN` to the exact site origin and redeploy the function. |
+| CORS error on Edge Function | Set `ALLOWED_ORIGIN` to the exact site origin (comma-separate several) and redeploy the function. |
 | 401 JWT errors in the browser | Stale session; sign out/in. Ensure `VITE_SUPABASE_ANON_KEY` matches the project. |
 
 ---

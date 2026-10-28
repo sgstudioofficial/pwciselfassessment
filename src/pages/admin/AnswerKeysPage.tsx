@@ -129,7 +129,6 @@ export function AnswerKeysPage() {
     if (!data || !id || hydrated) return
     const storedDrafts = readJson<Record<string, KeyDraft>>(DRAFT_PREFIX + id)
     const storedReviews = readJson<Record<string, string>>(REVIEW_PREFIX + id)
-    console.log('KEYS HYDRATE', Object.keys(storedDrafts ?? {}).length)
     if (storedDrafts) setDrafts(storedDrafts)
     if (storedReviews) setReviewed(storedReviews)
     setRestoredCount(Object.keys(storedDrafts ?? {}).length)
