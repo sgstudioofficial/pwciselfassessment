@@ -6,6 +6,7 @@ import type { UserRole } from '../../lib/types'
 export function homePath(role: UserRole | null | undefined, mustChange = false): string {
   if (mustChange) return '/change-password'
   if (role === 'admin') return '/admin'
+  if (role === 'evaluator') return '/admin/results'
   if (role === 'student') return '/student'
   return '/login'
 }
@@ -25,12 +26,14 @@ export function RequireAuth() {
   return <Outlet />
 }
 
-export function RequireRole({ role }: { role: UserRole }) {
+export function RequireRole({ roles }: { roles: UserRole[] }) {
   const { profile, loading } = useAuth()
 
   if (loading) return <FullPageLoader label="Checking your access…" />
   if (!profile) return <Navigate to="/login" replace />
-  if (profile.role !== role) return <Navigate to={homePath(profile.role)} replace />
+  if (!roles.includes(profile.role)) {
+    return <Navigate to={homePath(profile.role)} replace />
+  }
 
   return <Outlet />
 }

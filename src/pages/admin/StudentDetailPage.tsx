@@ -28,6 +28,7 @@ import { AssignTestDialog } from '../../components/admin/AssignTestDialog'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { supabase, invokeEdge } from '../../lib/supabase'
 import { getErrorMessage } from '../../lib/errors'
+import { formatAttemptLimitCount } from '../../lib/attempts'
 import {
   formatDate,
   formatDateTime,
@@ -431,7 +432,8 @@ export function AdminStudentDetailPage() {
                         </Td>
                         <Td>
                           <span className="text-sm text-slate-700">
-                            {assignmentAttempts.length} / {limit}
+                            {assignmentAttempts.length} /{' '}
+                            {formatAttemptLimitCount(limit)}
                           </span>
                           {latest ? (
                             <p className="text-xs text-slate-400">

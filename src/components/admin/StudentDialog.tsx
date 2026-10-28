@@ -1,6 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { AlertCircle, Copy, Eye, EyeOff, UserPlus } from 'lucide-react'
+import {
+  AlertCircle,
+  Copy,
+  Eye,
+  EyeOff,
+  Mail,
+  UserPlus,
+} from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Alert } from '../ui/Feedback'
@@ -8,6 +15,11 @@ import { Field, Input } from '../ui/Form'
 import { useToast } from '../../context/ToastContext'
 import { getErrorMessage } from '../../lib/errors'
 import { isValidEmail } from '../../lib/email'
+import {
+  buildCredentialMessage,
+  buildMailtoUrl,
+  isInternalStudentEmail,
+} from '../../lib/credentials'
 import { invokeEdge, supabase } from '../../lib/supabase'
 import { copyToClipboard } from '../../lib/clipboard'
 import type { Profile } from '../../lib/types'
@@ -133,6 +145,23 @@ export function StudentDialog({
     else toast.error('Could not copy', 'Select and copy the value manually.')
   }
 
+  const message = useMemo(
+    () =>
+      created
+        ? buildCredentialMessage({
+            fullName: created.student.full_name,
+            username: created.student.username,
+            password: created.temporary_password,
+          })
+        : null,
+    [created],
+  )
+
+  const mailto =
+    message && created && !isInternalStudentEmail(created.student.email)
+      ? buildMailtoUrl(message, created.student.email)
+      : null
+
   if (created) {
     return (
       <Modal
@@ -140,7 +169,7 @@ export function StudentDialog({
         onClose={handleClose}
         title="Student account ready"
         description="Share these credentials securely. The temporary password is shown only once."
-        size="md"
+        size="lg"
         footer={
           <Button variant="primary" onClick={handleClose}>
             Done
@@ -175,6 +204,51 @@ export function StudentDialog({
             The account is active and can sign in immediately. The sign-in email is
             kept server-side; the student only needs the username and password.
           </p>
+
+          {message ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  Ready-to-send message
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  Includes the username, password and sign-in steps
+                </span>
+              </div>
+              <textarea
+                readOnly
+                value={message.body}
+                rows={13}
+                spellCheck={false}
+                aria-label="Sign-in instructions for the student"
+                className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 font-mono text-[11px] leading-5 text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Copy className="h-3.5 w-3.5" />}
+                  onClick={() => copy(message.body, 'Message')}
+                >
+                  Copy message
+                </Button>
+                {mailto ? (
+                  <a
+                    href={mailto}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Email to {created.student.email}
+                  </a>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    No external email on file — copy the message and send it
+                    yourself.
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
       </Modal>
     )

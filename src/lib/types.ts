@@ -1,4 +1,6 @@
-export type UserRole = 'admin' | 'student'
+export type UserRole = 'admin' | 'student' | 'evaluator'
+/** Roles that can open the staff workspace and read results. */
+export type StaffRole = 'admin' | 'evaluator'
 export type TestStatus = 'draft' | 'published' | 'archived'
 export type QuestionType =
   | 'single_choice'

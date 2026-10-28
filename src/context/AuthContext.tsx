@@ -258,11 +258,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await registerSession(data.session.access_token, true)
       setSession(data.session)
       const nextProfile = await loadProfile(data.user.id)
-      if (nextProfile.role !== 'admin') {
+      if (nextProfile.role !== 'admin' && nextProfile.role !== 'evaluator') {
         await supabase.auth.signOut()
         setProfile(null)
         profileUserIdRef.current = null
-        throw new Error('This account does not have administrator access.')
+        throw new Error('This account is not allowed to use the staff sign-in.')
       }
       return nextProfile
     },

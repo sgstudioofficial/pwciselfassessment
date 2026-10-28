@@ -7,6 +7,7 @@ import { QuestionTypeBadge } from '../StatusBadge'
 import { OptionContent } from '../OptionContent'
 import { GridAnswerTable } from '../GridAnswerTable'
 import { publicImageUrl } from '../../lib/supabase'
+import { formatAttemptLimit } from '../../lib/attempts'
 import { formatMinutes, formatNumber } from '../../lib/format'
 import type { Question, Section, Test } from '../../lib/types'
 
@@ -66,9 +67,7 @@ export function TestPreviewModal({
               <Badge tone="brand">{formatMinutes(test.duration_minutes)}</Badge>
               <Badge tone="slate">{formatNumber(computedMax)} marks</Badge>
               <Badge tone="slate">Pass: {formatNumber(test.passing_marks)}</Badge>
-              <Badge tone="slate">
-                {test.attempt_limit} {test.attempt_limit === 1 ? 'attempt' : 'attempts'}
-              </Badge>
+              <Badge tone="slate">{formatAttemptLimit(test.attempt_limit)}</Badge>
               <Badge tone={test.show_results ? 'green' : 'amber'}>
                 {test.show_results ? 'Results visible after submit' : 'Results hidden'}
               </Badge>

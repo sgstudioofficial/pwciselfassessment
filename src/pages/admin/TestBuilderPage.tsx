@@ -26,6 +26,10 @@ import { QuestionEditorModal } from '../../components/admin/QuestionEditorModal'
 import { TestPreviewModal } from '../../components/admin/TestPreviewModal'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { callRpc } from '../../lib/rpc'
+import {
+  UNLIMITED_ATTEMPT_LIMIT,
+  isUnlimitedAttempts,
+} from '../../lib/attempts'
 import { fromDateTimeLocal, formatNumber, toDateTimeLocal } from '../../lib/format'
 import { getErrorMessage } from '../../lib/errors'
 import { publicImageUrl, supabase } from '../../lib/supabase'
@@ -179,8 +183,12 @@ export function TestBuilderPage() {
       return `Passing marks (${passing}) cannot exceed the total marks (${computedMax}).`
     }
     const limit = Number(meta.attemptLimit)
-    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
-      return 'Attempt limit must be between 1 and 20.'
+    if (
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      (!isUnlimitedAttempts(limit) && limit > 20)
+    ) {
+      return 'Attempt limit must be between 1 and 20, or unlimited.'
     }
     const start = fromDateTimeLocal(meta.startAt)
     const end = fromDateTimeLocal(meta.endAt)
@@ -830,21 +838,62 @@ export function TestBuilderPage() {
                       disabled={savingMeta || locked}
                     />
                   </Field>
-                  <Field label="Attempt limit" htmlFor="test-attempts">
-                    <Input
-                      id="test-attempts"
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={meta.attemptLimit}
-                      onChange={(event) =>
-                        setMeta((current) => ({
-                          ...current,
-                          attemptLimit: event.target.value,
-                        }))
-                      }
-                      disabled={savingMeta || locked}
-                    />
+                  <Field
+                    label="Attempt limit"
+                    htmlFor="test-attempts"
+                    hint={
+                      isUnlimitedAttempts(Number(meta.attemptLimit))
+                        ? 'Students can retake this test without a limit.'
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="test-attempts"
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={
+                          isUnlimitedAttempts(Number(meta.attemptLimit))
+                            ? ''
+                            : meta.attemptLimit
+                        }
+                        onChange={(event) =>
+                          setMeta((current) => ({
+                            ...current,
+                            attemptLimit: event.target.value,
+                          }))
+                        }
+                        placeholder={
+                          isUnlimitedAttempts(Number(meta.attemptLimit))
+                            ? 'Unlimited'
+                            : undefined
+                        }
+                        disabled={
+                          savingMeta ||
+                          locked ||
+                          isUnlimitedAttempts(Number(meta.attemptLimit))
+                        }
+                        className="max-w-[110px]"
+                      />
+                      <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={isUnlimitedAttempts(Number(meta.attemptLimit))}
+                          onChange={(event) =>
+                            setMeta((current) => ({
+                              ...current,
+                              attemptLimit: event.target.checked
+                                ? String(UNLIMITED_ATTEMPT_LIMIT)
+                                : '1',
+                            }))
+                          }
+                          disabled={savingMeta || locked}
+                          className="h-4 w-4 rounded border-slate-300 accent-brand-600"
+                        />
+                        Unlimited
+                      </label>
+                    </div>
                   </Field>
                 </div>
 

@@ -26,6 +26,10 @@ import { useAuth } from '../../context/AuthContext'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { callRpc } from '../../lib/rpc'
 import {
+  formatAttemptLimit,
+  isUnlimitedAttempts,
+} from '../../lib/attempts'
+import {
   formatDateTime,
   formatMinutes,
   formatNumber,
@@ -345,8 +349,8 @@ function AssignmentCard({
             <StudentAssignmentBadge status={assignment.status} />
             {assignment.attempts_used > 0 ? (
               <Badge tone="slate">
-                {assignment.attempts_used} / {assignment.attempt_limit}{' '}
-                {assignment.attempt_limit === 1 ? 'attempt' : 'attempts'}
+                {assignment.attempts_used} /{' '}
+                {formatAttemptLimit(assignment.attempt_limit)}
               </Badge>
             ) : null}
           </div>
@@ -414,7 +418,9 @@ function AssignmentCard({
               ? 'The deadline has passed'
               : assignment.status === 'completed'
               ? 'All attempts used'
-              : `${Math.max(0, assignment.attempt_limit - assignment.attempts_used)} of ${assignment.attempt_limit} attempts left`}
+              : isUnlimitedAttempts(assignment.attempt_limit)
+                ? 'Unlimited attempts left'
+                : `${Math.max(0, assignment.attempt_limit - assignment.attempts_used)} of ${assignment.attempt_limit} attempts left`}
         </span>
         <div className="flex items-center gap-2">
           {primaryAction}

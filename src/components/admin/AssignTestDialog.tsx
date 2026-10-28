@@ -9,6 +9,11 @@ import { useToast } from '../../context/ToastContext'
 import { getErrorMessage } from '../../lib/errors'
 import { supabase } from '../../lib/supabase'
 import { callRpc } from '../../lib/rpc'
+import {
+  UNLIMITED_ATTEMPT_LIMIT,
+  formatAttemptLimit,
+  isUnlimitedAttempts,
+} from '../../lib/attempts'
 import { formatMinutes, formatNumber, fromDateTimeLocal } from '../../lib/format'
 import type { Profile, Test } from '../../lib/types'
 import { cn } from '../../lib/cn'
@@ -40,6 +45,7 @@ export function AssignTestDialog({
   const [batch, setBatch] = useState('')
   const [dueAt, setDueAt] = useState('')
   const [attemptLimit, setAttemptLimit] = useState('')
+  const [unlimitedAttempts, setUnlimitedAttempts] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -54,6 +60,7 @@ export function AssignTestDialog({
     setBatch('')
     setDueAt('')
     setAttemptLimit('')
+    setUnlimitedAttempts(false)
     setSelectedTestId('')
     setSelectedStudentIds(
       new Set(initialStudentIds?.length ? initialStudentIds : []),
@@ -153,8 +160,16 @@ export function AssignTestDialog({
       return setError('The deadline must be in the future.')
     }
 
-    const limit = attemptLimit ? Number(attemptLimit) : null
-    if (limit != null && (!Number.isInteger(limit) || limit < 1 || limit > 20)) {
+    const limit = unlimitedAttempts
+      ? UNLIMITED_ATTEMPT_LIMIT
+      : attemptLimit
+        ? Number(attemptLimit)
+        : null
+    if (
+      !unlimitedAttempts &&
+      limit != null &&
+      (!Number.isInteger(limit) || limit < 1 || limit > 20)
+    ) {
       return setError('Attempt limit must be a whole number between 1 and 20.')
     }
 
@@ -266,29 +281,60 @@ export function AssignTestDialog({
               </span>
               <span>{formatNumber(selectedTest.max_marks)} marks total</span>
               <span>Pass: {formatNumber(selectedTest.passing_marks)}</span>
-              <span>
-                {selectedTest.attempt_limit}{' '}
-                {selectedTest.attempt_limit === 1 ? 'attempt' : 'attempts'} allowed
-              </span>
+              <span>{formatAttemptLimit(selectedTest.attempt_limit)} allowed</span>
             </div>
           ) : null}
 
-          <Field
-            label="Attempt limit override"
-            htmlFor="assign-limit"
-            hint="Leave blank to use the test default."
-          >
-            <Input
-              id="assign-limit"
-              type="number"
-              min={1}
-              max={20}
-              value={attemptLimit}
-              onChange={(event) => setAttemptLimit(event.target.value)}
-              placeholder={selectedTest ? String(selectedTest.attempt_limit) : 'Test default'}
-              className="max-w-[180px]"
-            />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-start">
+            <Field
+              label="Attempt limit override"
+              htmlFor="assign-limit"
+              hint="Leave blank to use the test default."
+            >
+              <Input
+                id="assign-limit"
+                type="number"
+                min={1}
+                max={20}
+                value={unlimitedAttempts ? '' : attemptLimit}
+                onChange={(event) => setAttemptLimit(event.target.value)}
+                placeholder={
+                  unlimitedAttempts
+                    ? 'Unlimited'
+                    : selectedTest
+                      ? String(selectedTest.attempt_limit)
+                      : 'Test default'
+                }
+                disabled={unlimitedAttempts}
+              />
+            </Field>
+
+            <label
+              className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition',
+                unlimitedAttempts
+                  ? 'border-brand-300 bg-brand-50/60'
+                  : 'border-slate-200 bg-white hover:bg-slate-50',
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={unlimitedAttempts}
+                onChange={(event) => setUnlimitedAttempts(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-brand-600"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-900">
+                  Unlimited attempts
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                  {isUnlimitedAttempts(selectedTest?.attempt_limit)
+                    ? 'This test is already unlimited by default. The override is ignored.'
+                    : 'Students can retake this assessment as often as they like. The deadline still applies.'}
+                </span>
+              </span>
+            </label>
+          </div>
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">

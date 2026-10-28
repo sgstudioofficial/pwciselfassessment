@@ -13,6 +13,7 @@ import {
 import { Table, TBody, Td, Th, THead, Tr } from '../../components/ui/Table'
 import { AttemptStatusBadge } from '../../components/StatusBadge'
 import { useAsyncData } from '../../hooks/useAsyncData'
+import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
   formatDateTime,
@@ -24,8 +25,45 @@ import type { AttemptStatus, ResultListRow } from '../../lib/types'
 
 type StatusFilter = 'all' | 'submitted' | 'graded'
 
+type ResultStudent = NonNullable<ResultListRow['profiles']>
+
+function StudentIdentity({
+  student,
+  linked,
+}: {
+  student: ResultStudent
+  linked: boolean
+}) {
+  const content = (
+    <>
+      <Avatar name={student.full_name} size="sm" />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-slate-900 group-hover:text-brand-700">
+          {student.full_name}
+        </span>
+        <span className="block truncate text-xs text-slate-400">
+          @{student.username}
+          {student.department ? ` · ${student.department}` : ''}
+        </span>
+      </span>
+    </>
+  )
+
+  if (!linked) {
+    return <div className="flex items-center gap-3">{content}</div>
+  }
+  return (
+    <Link to={`/admin/students/${student.id}`} className="group flex items-center gap-3">
+      {content}
+    </Link>
+  )
+}
+
 export function AdminResultsPage() {
   const [searchParams] = useSearchParams()
+  const { profile } = useAuth()
+  // Results reviewers can grade but must not open student administration.
+  const canOpenStudents = profile?.role !== 'evaluator'
   const { data: attempts, loading, error, reload } = useAsyncData<
     ResultListRow[]
   >(async () => {
@@ -281,23 +319,10 @@ export function AdminResultsPage() {
                   <Tr key={attempt.id}>
                     <Td>
                       {attempt.profiles ? (
-                        <Link
-                          to={`/admin/students/${attempt.profiles.id}`}
-                          className="group flex items-center gap-3"
-                        >
-                          <Avatar name={attempt.profiles.full_name} size="sm" />
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium text-slate-900 group-hover:text-brand-700">
-                              {attempt.profiles.full_name}
-                            </span>
-                            <span className="block truncate text-xs text-slate-400">
-                              @{attempt.profiles.username}
-                              {attempt.profiles.department
-                                ? ` · ${attempt.profiles.department}`
-                                : ''}
-                            </span>
-                          </span>
-                        </Link>
+                        <StudentIdentity
+                          student={attempt.profiles}
+                          linked={canOpenStudents}
+                        />
                       ) : (
                         <span className="text-sm text-slate-500">Deleted student</span>
                       )}

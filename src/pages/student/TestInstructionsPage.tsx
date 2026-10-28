@@ -26,6 +26,7 @@ import { StudentAssignmentBadge } from '../../components/StatusBadge'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { callRpc } from '../../lib/rpc'
 import { getErrorMessage } from '../../lib/errors'
+import { isUnlimitedAttempts } from '../../lib/attempts'
 import { useToast } from '../../context/ToastContext'
 import {
   formatDateTime,
@@ -123,6 +124,7 @@ export function TestInstructionsPage() {
   }
 
   const attemptsLeft = Math.max(0, data.attempt_limit - data.attempts_used)
+  const unlimitedAttempts = isUnlimitedAttempts(data.attempt_limit)
   const canBegin = data.can_start
   const resumeId = data.open_attempt_id
   const blockedReason =
@@ -208,7 +210,11 @@ export function TestInstructionsPage() {
             />
             <MetaItem
               label="Attempts"
-              value={`${data.attempts_used} used · ${attemptsLeft} left`}
+              value={
+                unlimitedAttempts
+                  ? `${data.attempts_used} used · unlimited`
+                  : `${data.attempts_used} used · ${attemptsLeft} left`
+              }
             />
             <MetaItem
               label="Deadline"

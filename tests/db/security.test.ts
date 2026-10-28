@@ -697,7 +697,7 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
       )
       await expect(
         jsonRpc('get_admin_attempt_detail', [attemptAId]),
-      ).rejects.toThrow(/Administrator access required/i)
+      ).rejects.toThrow(/results access required/i)
 
       const review = await jsonRpc<{ allowed: boolean }>('get_attempt_review', [
         attemptAId,
@@ -1382,5 +1382,150 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
       [testAId],
     )
     expect(stillThere[0].count).toBe(1)
+  })
+
+  it('lets evaluators read and grade results without admin powers', async () => {
+    const evaluatorId = await createUser('reviewer@example.com', 'Results Reviewer')
+    await query(
+      `update public.profiles
+       set role = 'evaluator', username = 'reviewer', full_name = 'Results Reviewer',
+           is_active = true, must_change_password = false
+       where id = $1`,
+      [evaluatorId],
+    )
+
+    await setSession('authenticated', evaluatorId)
+    try {
+      const attemptRows = await query<{ id: string }>(
+        'select id from public.attempts where status <> $1 limit 1',
+        ['in_progress'],
+      )
+      expect(attemptRows).toHaveLength(1)
+
+      const detail = await jsonRpc<{ test: { id: string }; sections: unknown[] }>(
+        'get_admin_attempt_detail',
+        [attemptRows[0].id],
+      )
+      expect(detail.test.id).toBe(testAId)
+      expect(detail.sections.length).toBeGreaterThan(0)
+
+      const profiles = await query<{ count: number }>(
+        'select count(*)::int as count from public.profiles',
+      )
+      expect(profiles[0].count).toBeGreaterThan(1)
+
+      // The guard passed: it reached the lookup instead of refusing the role.
+      await expect(
+        jsonRpc('grade_response', [
+          '00000000-0000-0000-0000-000000000000',
+          1,
+        ]),
+      ).rejects.toThrow(/response not found/i)
+
+      await expect(
+        jsonRpc('assign_test', [testAId, [studentOneId]]),
+      ).rejects.toThrow(/administrator access required/i)
+
+      await expect(
+        query(
+          `insert into public.profiles (id, email, full_name)
+           values (gen_random_uuid(), 'sneaky@example.com', 'Sneaky')`,
+        ),
+      ).rejects.toThrow(/row-level security/i)
+
+      await query('update public.tests set title = $1 where id = $2', [
+        'Hijacked',
+        testAId,
+      ])
+      const unchanged = await query<{ title: string }>(
+        'select title from public.tests where id = $1',
+        [testAId],
+      )
+      expect(unchanged[0].title).toBe('Compliance basics')
+    } finally {
+      await setSession('postgres')
+    }
+  })
+
+  it('accepts an unlimited attempt override and reports it to the student', async () => {
+    const unlimitedTestId = await createPublishedTest({
+      title: 'Unlimited practice',
+      questions: [
+        {
+          type: 'single_choice',
+          prompt: 'Pick A',
+          marks: 1,
+          options: [
+            { id: 'a', text: 'Alpha' },
+            { id: 'b', text: 'Beta' },
+          ],
+          correct: ['a'],
+        },
+      ],
+    })
+
+    await setSession('authenticated', adminId)
+    let inserted: number
+    try {
+      const rows = await query<{ assign_test: number }>(
+        `select public.assign_test(
+           $1, array[$2]::uuid[], null, 1000000000
+         ) as assign_test`,
+        [unlimitedTestId, studentTwoId],
+      )
+      inserted = rows[0].assign_test
+    } finally {
+      await setSession('postgres')
+    }
+    expect(inserted).toBe(1)
+
+    const assignmentRows = await query<{ attempt_limit: number }>(
+      `select attempt_limit from public.test_assignments
+       where test_id = $1 and student_id = $2`,
+      [unlimitedTestId, studentTwoId],
+    )
+    expect(assignmentRows[0].attempt_limit).toBe(1_000_000_000)
+
+    await setSession('authenticated', studentTwoId)
+    let assignment: { attempt_limit: number; status: string; can_start: boolean }
+    try {
+      const dashboard = await jsonRpc<{
+        assignments: { test_id: string; attempt_limit: number; status: string; can_start: boolean }[]
+      }>('get_student_dashboard')
+      assignment = dashboard.assignments.find(
+        (item) => item.test_id === unlimitedTestId,
+      )!
+    } finally {
+      await setSession('postgres')
+    }
+
+    expect(assignment.attempt_limit).toBe(1_000_000_000)
+    expect(assignment.status).toBe('available')
+    expect(assignment.can_start).toBe(true)
+
+    // The old 1–20 cap still applies; only the sentinel is extra.
+    await expect(
+      query(
+        `update public.test_assignments set attempt_limit = 21
+         where test_id = $1 and student_id = $2`,
+        [unlimitedTestId, studentTwoId],
+      ),
+    ).rejects.toThrow(/test_assignments_attempt_limit_range/)
+
+    await expect(
+      query(
+        `update public.test_assignments set attempt_limit = 1000000001
+         where test_id = $1 and student_id = $2`,
+        [unlimitedTestId, studentTwoId],
+      ),
+    ).rejects.toThrow(/test_assignments_attempt_limit_range/)
+
+    await expect(
+      query(
+        `update public.test_assignments set attempt_limit = 1000000000
+         where test_id = $1 and student_id = $2`,
+        [unlimitedTestId, studentTwoId],
+      ),
+    ).resolves.toBeDefined()
   })
 })

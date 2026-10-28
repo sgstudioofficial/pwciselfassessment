@@ -1,11 +1,12 @@
 import { Suspense, lazy, useEffect } from 'react'
-import { Link, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { isSupabaseConfigured } from './lib/supabase'
 import {
   HomeRedirect,
   RequireAuth,
   RequireRole,
 } from './components/auth/ProtectedRoute'
+import { useAuth } from './context/AuthContext'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { StudentLayout } from './components/layout/StudentLayout'
 import { Brand } from './components/layout/Brand'
@@ -116,6 +117,17 @@ function ScrollToTop() {
   return null
 }
 
+/**
+ * Admins land on the overview; results reviewers land on their results queue.
+ */
+function AdminHome() {
+  const { profile } = useAuth()
+  if (profile?.role === 'evaluator') {
+    return <Navigate to="/admin/results" replace />
+  }
+  return <AdminDashboardPage />
+}
+
 function NotFoundPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-5 text-center">
@@ -163,25 +175,31 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route path="/change-password" element={<ChangePasswordPage />} />
 
-            <Route element={<RequireRole role="admin" />}>
+            <Route element={<RequireRole roles={['admin', 'evaluator']} />}>
               <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminDashboardPage />} />
-                <Route path="students" element={<AdminStudentsPage />} />
-                <Route path="students/:id" element={<AdminStudentDetailPage />} />
-                <Route path="tests" element={<AdminTestsPage />} />
-                <Route path="tests/:id/edit" element={<TestBuilderPage />} />
-                <Route path="tests/:id/keys" element={<AnswerKeysPage />} />
-                <Route path="assignments" element={<AdminAssignmentsPage />} />
+                <Route index element={<AdminHome />} />
+
+                {/* Results are the reviewer's whole workspace. */}
                 <Route path="results" element={<AdminResultsPage />} />
                 <Route
                   path="results/:attemptId"
                   element={<AdminResultDetailPage />}
                 />
-                <Route path="settings" element={<AdminSettingsPage />} />
+
+                {/* Everything else stays admin-only. */}
+                <Route element={<RequireRole roles={['admin']} />}>
+                  <Route path="students" element={<AdminStudentsPage />} />
+                  <Route path="students/:id" element={<AdminStudentDetailPage />} />
+                  <Route path="tests" element={<AdminTestsPage />} />
+                  <Route path="tests/:id/edit" element={<TestBuilderPage />} />
+                  <Route path="tests/:id/keys" element={<AnswerKeysPage />} />
+                  <Route path="assignments" element={<AdminAssignmentsPage />} />
+                  <Route path="settings" element={<AdminSettingsPage />} />
+                </Route>
               </Route>
             </Route>
 
-            <Route element={<RequireRole role="student" />}>
+            <Route element={<RequireRole roles={['student']} />}>
               <Route path="/student" element={<StudentLayout />}>
                 <Route index element={<StudentDashboardPage />} />
                 <Route path="results" element={<StudentResultsPage />} />

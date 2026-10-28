@@ -11,6 +11,7 @@ import { AssignTestDialog } from '../../components/admin/AssignTestDialog'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { supabase } from '../../lib/supabase'
 import { getErrorMessage } from '../../lib/errors'
+import { formatAttemptLimitCount } from '../../lib/attempts'
 import { formatDateTime, formatRelative } from '../../lib/format'
 import { useToast } from '../../context/ToastContext'
 import type { AssignmentListRow } from '../../lib/types'
@@ -293,7 +294,7 @@ export function AdminAssignmentsPage() {
                     <Td>
                       <span className="text-sm text-slate-700">
                         {attempts.length}
-                        {effectiveLimit ? ` / ${effectiveLimit}` : ''}
+                        {effectiveLimit ? ` / ${formatAttemptLimitCount(effectiveLimit)}` : ''}
                       </span>
                       {latest ? (
                         <p className="text-xs text-slate-400">

@@ -15,16 +15,39 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { useAuth } from '../../context/AuthContext'
+import type { UserRole } from '../../lib/types'
 import { Avatar } from '../ui/Misc'
 import { Brand, BrandMark } from './Brand'
 
-const navItems = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/students', label: 'Students', icon: Users },
-  { to: '/admin/tests', label: 'Tests', icon: ClipboardList },
-  { to: '/admin/assignments', label: 'Assignments', icon: Send },
-  { to: '/admin/results', label: 'Results', icon: BarChart3 },
-  { to: '/admin/settings', label: 'Settings', icon: Settings },
+const navItems: {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  end?: boolean
+  roles: UserRole[]
+}[] = [
+  {
+    to: '/admin',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    end: true,
+    roles: ['admin'],
+  },
+  { to: '/admin/students', label: 'Students', icon: Users, roles: ['admin'] },
+  { to: '/admin/tests', label: 'Tests', icon: ClipboardList, roles: ['admin'] },
+  {
+    to: '/admin/assignments',
+    label: 'Assignments',
+    icon: Send,
+    roles: ['admin'],
+  },
+  {
+    to: '/admin/results',
+    label: 'Results',
+    icon: BarChart3,
+    roles: ['admin', 'evaluator'],
+  },
+  { to: '/admin/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
 ]
 
 export function AdminLayout() {
@@ -32,6 +55,10 @@ export function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+  const isEvaluator = profile?.role === 'evaluator'
+  const visibleNav = navItems.filter(
+    (item) => profile != null && item.roles.includes(profile.role),
+  )
 
   useEffect(() => {
     setMobileOpen(false)
@@ -66,14 +93,16 @@ export function AdminLayout() {
         <ShieldCheck className="h-4 w-4 text-brand-300" />
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-300">
-            Admin workspace
+            {isEvaluator ? 'Results workspace' : 'Admin workspace'}
           </p>
-          <p className="truncate text-xs text-slate-400">Full assessment control</p>
+          <p className="truncate text-xs text-slate-400">
+            {isEvaluator ? 'Review and grade attempts' : 'Full assessment control'}
+          </p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3">
-        {navItems.map((item) => {
+        {visibleNav.map((item) => {
           const Icon = item.icon
           return (
             <NavLink
@@ -168,7 +197,7 @@ export function AdminLayout() {
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-              Admin
+              {isEvaluator ? 'Evaluator' : 'Admin'}
             </span>
             <Avatar name={profile?.full_name ?? 'Admin'} size="sm" />
           </div>

@@ -17,6 +17,7 @@ import { GridAnswerTable } from '../../components/GridAnswerTable'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { callRpc } from '../../lib/rpc'
 import { publicImageUrl } from '../../lib/supabase'
+import { formatAttemptLimitCount } from '../../lib/attempts'
 import { gridAnswerText } from '../../lib/grid'
 import {
   formatDateTime,
@@ -192,7 +193,7 @@ export function AdminResultDetailPage() {
           <MetaItem label="Passing marks" value={formatNumber(test.passing_marks)} />
           <MetaItem
             label="Attempt"
-            value={`#${attempt.attempt_number} of ${test.attempt_limit}`}
+            value={`#${attempt.attempt_number} of ${formatAttemptLimitCount(test.attempt_limit)}`}
           />
         </dl>
       </div>
