@@ -77,6 +77,8 @@ export interface Question {
   options: QuestionOption[]
   correct_options: string[]
   answer_key: string | null
+  /** Additional accepted short answers; empty for every other type. */
+  answer_aliases: string[]
   explanation: string | null
   /** Rows of a grid question; always empty for other question types. */
   grid_rows: GridRow[]
@@ -234,6 +236,8 @@ export interface AttemptFeedback {
   correct_options: string[]
   answer_key: string | null
   explanation: string | null
+  checked_at?: string | null
+  check_attempts?: number
 }
 
 export interface AttemptAnswerState {
@@ -245,6 +249,8 @@ export interface AttemptAnswerState {
   awarded_marks?: number | null
   is_correct?: boolean | null
   graded_at?: string | null
+  checked_at?: string | null
+  check_attempts?: number
   feedback?: AttemptFeedback | null
 }
 
@@ -297,6 +303,7 @@ export interface MyResultsData {
 export interface ReviewQuestion extends AttemptQuestion {
   correct_options: string[]
   answer_key: string | null
+  answer_aliases: string[]
   explanation: string | null
   response: {
     id: string
@@ -306,6 +313,8 @@ export interface ReviewQuestion extends AttemptQuestion {
     is_correct: boolean | null
     is_flagged: boolean
     graded_at: string | null
+    checked_at?: string | null
+    check_attempts?: number
   } | null
 }
 

@@ -16,12 +16,14 @@ import {
   applyGridRow,
   applyOption,
   draftFromQuestion,
+  formatAliases,
   gridColumns,
   isKeyComplete,
   keyFingerprint,
   keyPatch,
   optionHotkeys,
   optionLetter,
+  parseAliases,
   sameDraft,
 } from '../../lib/answerKey'
 import type { KeyDraft } from '../../lib/answerKey'
@@ -258,6 +260,7 @@ export function AnswerKeysPage() {
       const haystack = [
         question.prompt,
         question.answer_key ?? '',
+        ...(question.answer_aliases ?? []),
         ...question.options.map((option) => option.text),
         ...question.grid_rows.map((row) => row.text),
       ]
@@ -775,7 +778,7 @@ function KeyControl({
 }) {
   if (question.question_type === 'short_answer') {
     return (
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-1.5">
         <Input
           value={draft.answerKey}
           onChange={(event) => onChange({ ...draft, answerKey: event.target.value })}
@@ -788,6 +791,21 @@ function KeyControl({
           placeholder="Expected answer — graded on a case- and whitespace-insensitive match"
           aria-label="Expected answer"
           className="py-1.5 text-sm"
+        />
+        <Input
+          value={formatAliases(draft.aliases, '; ')}
+          onChange={(event) =>
+            onChange({ ...draft, aliases: parseAliases(event.target.value) })
+          }
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onConfirm()
+            }
+          }}
+          placeholder="Also accept — separate alternatives with a semicolon"
+          aria-label="Also accepted answers"
+          className="py-1.5 text-xs"
         />
       </div>
     )

@@ -3,12 +3,14 @@ import {
   applyGridRow,
   applyOption,
   draftFromQuestion,
+  formatAliases,
   gridColumns,
   isKeyComplete,
   isPlaceholderKey,
   keyFingerprint,
   keyPatch,
   optionHotkeys,
+  parseAliases,
   placeholderKey,
 } from '../../src/lib/answerKey'
 import type { Question } from '../../src/lib/types'
@@ -29,6 +31,7 @@ function makeQuestion(overrides: Partial<Question>): Question {
     ],
     correct_options: ['a'],
     answer_key: null,
+    answer_aliases: [],
     explanation: null,
     grid_rows: [],
     position: 0,
@@ -105,16 +108,74 @@ describe('answer key helpers', () => {
     expect(keyPatch(grid, { correct: ['a:b', 'b:a'], answerKey: '' })).toEqual({
       correct_options: ['a:b', 'b:a'],
       answer_key: null,
+      answer_aliases: [],
     })
     expect(
       keyPatch(makeQuestion({ question_type: 'short_answer', options: [] }), {
         correct: [],
         answerKey: '  1,250 psi  ',
       }),
-    ).toEqual({ correct_options: [], answer_key: '1,250 psi' })
+    ).toEqual({
+      correct_options: [],
+      answer_key: '1,250 psi',
+      answer_aliases: [],
+    })
     expect(
       keyPatch(makeQuestion({}), { correct: ['b'], answerKey: '' }),
-    ).toEqual({ correct_options: ['b'], answer_key: null })
+    ).toEqual({
+      correct_options: ['b'],
+      answer_key: null,
+      answer_aliases: [],
+    })
+  })
+
+  it('stores and fingerprints accepted alternatives', () => {
+    const short = makeQuestion({ question_type: 'short_answer', options: [] })
+    expect(parseAliases('0.128\n 0.12 ;0.1\n0.12')).toEqual([
+      '0.128',
+      '0.12',
+      '0.1',
+    ])
+    expect(formatAliases(['0.128', '0.12'], '; ')).toBe('0.128; 0.12')
+
+    expect(
+      keyPatch(short, {
+        correct: [],
+        answerKey: '0.12',
+        aliases: [' 0.1 ', '0.128', '0.1'],
+      }),
+    ).toEqual({
+      correct_options: [],
+      answer_key: '0.12',
+      answer_aliases: ['0.1', '0.128'],
+    })
+
+    expect(
+      keyFingerprint(short, {
+        correct: [],
+        answerKey: '0.12',
+        aliases: ['0.1', '0.128'],
+      }),
+    ).toBe(
+      keyFingerprint(short, {
+        correct: [],
+        answerKey: ' 0.12 ',
+        aliases: ['0.128', '0.1'],
+      }),
+    )
+    expect(
+      keyFingerprint(short, {
+        correct: [],
+        answerKey: '0.12',
+        aliases: ['0.1'],
+      }),
+    ).not.toBe(
+      keyFingerprint(short, {
+        correct: [],
+        answerKey: '0.12',
+        aliases: ['0.1', '0.128'],
+      }),
+    )
   })
 
   it('fingerprints keys so reviews follow the exact key, not the row', () => {

@@ -93,6 +93,7 @@ export function TakeTestPage() {
   const saveErrorShownRef = useRef(false)
   const autoTriggeredRef = useRef(false)
   const submitRef = useRef<(auto: boolean) => Promise<void>>(async () => undefined)
+  const checkingRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     stateRef.current = state
@@ -136,6 +137,7 @@ export function TakeTestPage() {
       setAnswers(initial)
       setFeedback(initialFeedback)
       setChecking({})
+      checkingRef.current = new Set()
       dirtyRef.current = new Set()
       failedRef.current = new Set()
       savingRef.current = 0
@@ -311,6 +313,23 @@ export function TakeTestPage() {
     (questionId: string, patch: Partial<AnswerDraft>) => {
       if (submittedRef.current || submittingRef.current) return
       const current = answersRef.current[questionId] ?? emptyAnswerDraft()
+      const answerChanged =
+        (patch.selected !== undefined &&
+          (patch.selected.length !== current.selected.length ||
+            patch.selected.some((id) => !current.selected.includes(id)))) ||
+        (patch.text !== undefined && patch.text !== current.text)
+
+      if (answerChanged) {
+        // A checked answer that is still wrong becomes editable again; drop the
+        // red state so the student can check the new answer cleanly.
+        setFeedback((currentFeedback) => {
+          if (!currentFeedback[questionId]) return currentFeedback
+          const nextFeedback = { ...currentFeedback }
+          delete nextFeedback[questionId]
+          return nextFeedback
+        })
+      }
+
       const next = {
         ...answersRef.current,
         [questionId]: { ...current, ...patch },
@@ -339,7 +358,9 @@ export function TakeTestPage() {
   const checkQuestion = useCallback(
     async (questionId: string) => {
       if (!attemptId || submittedRef.current || submittingRef.current) return
-      if (feedback[questionId]) return
+      if (feedback[questionId]?.is_correct) return
+      if (checkingRef.current.has(questionId)) return
+      checkingRef.current.add(questionId)
 
       if (timersRef.current[questionId]) {
         window.clearTimeout(timersRef.current[questionId])
@@ -361,6 +382,7 @@ export function TakeTestPage() {
       } catch (checkError) {
         toast.error('Could not check this answer', getErrorMessage(checkError))
       } finally {
+        checkingRef.current.delete(questionId)
         setChecking((current) => {
           const next = { ...current }
           delete next[questionId]
@@ -535,7 +557,7 @@ export function TakeTestPage() {
   const immediateFeedback = state.attempt.feedback_mode === 'immediate'
   const autoCheckCurrent =
     immediateFeedback &&
-    !currentFeedback &&
+    currentFeedback?.is_correct !== true &&
     (currentEntry.question.question_type === 'single_choice' ||
       currentEntry.question.question_type === 'true_false')
   const progress = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0
@@ -662,7 +684,7 @@ export function TakeTestPage() {
               disabled={submitting || clockExpired}
               feedback={currentFeedback}
               checking={currentChecking}
-              checkEnabled={immediateFeedback && !currentFeedback}
+              checkEnabled={immediateFeedback && currentFeedback?.is_correct !== true}
               autoCheck={autoCheckCurrent}
               onCheck={() => void checkQuestion(currentEntry.question.id)}
               onChange={(patch) => updateAnswer(currentEntry.question.id, patch)}

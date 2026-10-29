@@ -247,6 +247,11 @@ function ReviewCard({ question, index }: { question: ReviewQuestion; index: numb
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
               {question.answer_key || 'No model answer provided.'}
             </p>
+            {question.answer_aliases?.length ? (
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Also accepted: {question.answer_aliases.join(' · ')}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : question.question_type === 'grid' ? (

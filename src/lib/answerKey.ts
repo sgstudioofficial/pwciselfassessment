@@ -11,13 +11,46 @@ export type KeyDraft = {
   correct: string[]
   /** Expected text for short answers; empty for every other type. */
   answerKey: string
+  /** Additional accepted short answers (answer range). */
+  aliases?: string[]
+}
+
+export function aliasesOf(draft: KeyDraft): string[] {
+  return draft.aliases ?? []
 }
 
 export function draftFromQuestion(question: Question): KeyDraft {
   return {
     correct: question.correct_options ?? [],
     answerKey: question.answer_key ?? '',
+    aliases: question.answer_aliases ?? [],
   }
+}
+
+/**
+ * Aliases are entered one per line (or separated by semicolons). Empty and
+ * duplicate entries are dropped so the stored list stays tidy.
+ */
+export function parseAliases(value: string): string[] {
+  const seen = new Set<string>()
+  return value
+    .split(/[\n;]+/)
+    .map((entry) => entry.trim())
+    .filter((entry) => {
+      if (!entry) return false
+      const identity = normalize(entry)
+      if (seen.has(identity)) return false
+      seen.add(identity)
+      return true
+    })
+}
+
+export function formatAliases(aliases: string[] | undefined, separator = '\n'): string {
+  return (aliases ?? []).join(separator)
+}
+
+export function cleanAliases(aliases: string[] | undefined): string[] {
+  return parseAliases((aliases ?? []).join('\n'))
 }
 
 /** The key the importer wrote: first option, "true", or the first column. */
@@ -60,7 +93,11 @@ export function isKeyComplete(question: Question, draft: KeyDraft): boolean {
 /** Stable identity of a key, used to tie "reviewed" marks to its content. */
 export function keyFingerprint(question: Question, draft: KeyDraft): string {
   if (question.question_type === 'short_answer') {
-    return `short|${normalize(draft.answerKey)}`
+    const aliases = cleanAliases(draft.aliases)
+      .map(normalize)
+      .sort()
+      .join('|')
+    return `short|${normalize(draft.answerKey)}|${aliases}`
   }
   return `${question.question_type}|${[...draft.correct].sort().join(',')}`
 }
@@ -144,17 +181,26 @@ export function sameDraft(a: KeyDraft, b: KeyDraft, question: Question): boolean
 export function keyPatch(
   question: Question,
   draft: KeyDraft,
-): { correct_options: string[]; answer_key: string | null } {
+): { correct_options: string[]; answer_key: string | null; answer_aliases: string[] } {
   if (question.question_type === 'short_answer') {
-    return { correct_options: [], answer_key: draft.answerKey.trim() || null }
+    return {
+      correct_options: [],
+      answer_key: draft.answerKey.trim() || null,
+      answer_aliases: cleanAliases(draft.aliases),
+    }
   }
   if (question.question_type === 'grid') {
     return {
       correct_options: gridKeysForRows(question.grid_rows, draft.correct),
       answer_key: null,
+      answer_aliases: [],
     }
   }
-  return { correct_options: draft.correct, answer_key: null }
+  return {
+    correct_options: draft.correct,
+    answer_key: null,
+    answer_aliases: [],
+  }
 }
 
 function sameIds(a: string[], b: string[]): boolean {

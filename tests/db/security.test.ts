@@ -69,6 +69,7 @@ type QuestionSeed = {
   rows?: { id: string; text: string }[]
   correct?: string[]
   answerKey?: string
+  answerAliases?: string[]
 }
 
 async function createPublishedTest(options: {
@@ -113,9 +114,9 @@ async function createPublishedTest(options: {
     await query(
       `insert into public.questions
         (section_id, question_type, prompt, marks, is_required, options,
-         correct_options, answer_key, explanation, position, grid_rows)
+         correct_options, answer_key, answer_aliases, explanation, position, grid_rows)
        values ($1, $2::public.question_type, $3, $4, true, $5::jsonb,
-               $6::text[], $7, $8, $9, $10::jsonb)`,
+               $6::text[], $7, $8::text[], $9, $10, $11::jsonb)`,
       [
         sectionId,
         question.type,
@@ -124,6 +125,7 @@ async function createPublishedTest(options: {
         JSON.stringify(question.options ?? []),
         arrayLiteral(question.correct ?? []),
         question.answerKey ?? null,
+        arrayLiteral(question.answerAliases ?? []),
         question.type === 'single_choice' ? 'Explained in the training.' : null,
         position,
         JSON.stringify(question.rows ?? []),
@@ -991,7 +993,7 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
     }
   })
 
-  it('checks and locks answers immediately in instant-feedback mode', async () => {
+  it('checks answers immediately, allows retries until correct, and reveals the key only on success', async () => {
     const assignmentRows = await query<{ id: string }>(
       `select id from public.test_assignments where test_id = $1 and student_id = $2`,
       [testFId, studentOneId],
@@ -1041,19 +1043,32 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
       /Answer the question/i,
     )
 
-    // A wrong choice is graded and reveals only this question's key.
+    // A wrong choice shows red, awards nothing and reveals nothing.
     await saveAnswer(attemptId, q1.id, ['b'], null)
     const wrong = await checkResponse(attemptId, q1.id)
     expect(wrong.is_correct).toBe(false)
     expect(wrong.awarded_marks).toBe(0)
     expect(wrong.marks).toBe(2)
-    expect(wrong.correct_options).toEqual(['a'])
+    expect(wrong.correct_options).toEqual([])
     expect(wrong.answer_key).toBeNull()
+    expect(wrong.explanation).toBeNull()
 
-    // Checked answers are immutable, but flags can still change.
-    await expect(saveAnswer(attemptId, q1.id, ['a'], null)).rejects.toThrow(
-      /locked/i,
+    const wrongRow = await query<{
+      awarded_marks: string | null
+      graded_at: string | null
+      checked_at: string | null
+      check_attempts: number
+    }>(
+      `select awarded_marks::text, graded_at::text, checked_at::text, check_attempts
+       from public.responses where attempt_id = $1 and question_id = $2`,
+      [attemptId, q1.id],
     )
+    expect(wrongRow[0].awarded_marks).toBeNull()
+    expect(wrongRow[0].graded_at).toBeNull()
+    expect(wrongRow[0].checked_at).not.toBeNull()
+    expect(wrongRow[0].check_attempts).toBe(1)
+
+    // The answer stays editable; flagging alone preserves the red state.
     const flagged = await saveAnswer(attemptId, q1.id, ['b'], null, true)
     expect(flagged.attempt_status).toBe('in_progress')
     const flaggedRow = await query<{ is_flagged: boolean }>(
@@ -1062,40 +1077,79 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
     )
     expect(flaggedRow[0].is_flagged).toBe(true)
 
-    // Re-checking an already checked answer is stable and does not regrade.
+    await setSession('authenticated', studentOneId)
+    let flaggedState: {
+      responses: {
+        question_id: string
+        feedback: {
+          is_correct: boolean
+          correct_options: string[]
+          answer_key: string | null
+        } | null
+      }[]
+    }
+    try {
+      flaggedState = await jsonRpc('get_attempt_state', [attemptId])
+    } finally {
+      await setSession('postgres')
+    }
+    const flaggedQ1 = flaggedState.responses.find(
+      (response) => response.question_id === q1.id,
+    )
+    expect(flaggedQ1?.feedback?.is_correct).toBe(false)
+    expect(flaggedQ1?.feedback?.correct_options).toEqual([])
+    expect(flaggedQ1?.feedback?.answer_key).toBeNull()
+    expect(JSON.stringify(flaggedState)).not.toContain('Annual review')
+
+    // Changing the answer clears the red state.
+    await saveAnswer(attemptId, q1.id, ['a'], null)
+    await setSession('authenticated', studentOneId)
+    let clearedState: {
+      responses: {
+        question_id: string
+        feedback: unknown
+      }[]
+    }
+    try {
+      clearedState = await jsonRpc('get_attempt_state', [attemptId])
+    } finally {
+      await setSession('postgres')
+    }
+    expect(
+      clearedState.responses.find((response) => response.question_id === q1.id)
+        ?.feedback ?? null,
+    ).toBeNull()
+
+    // Checking the new answer succeeds, reveals the key and locks it.
+    const right = await checkResponse(attemptId, q1.id)
+    expect(right.is_correct).toBe(true)
+    expect(right.awarded_marks).toBe(2)
+    expect(right.correct_options).toEqual(['a'])
+    await expect(saveAnswer(attemptId, q1.id, ['b'], null)).rejects.toThrow(
+      /locked/i,
+    )
+
+    // Re-checking a correct answer is stable and does not regrade.
     const repeated = await checkResponse(attemptId, q1.id)
-    expect(repeated.is_correct).toBe(false)
-    expect(repeated.awarded_marks).toBe(0)
+    expect(repeated.is_correct).toBe(true)
+    expect(repeated.awarded_marks).toBe(2)
+    const stableRow = await query<{ check_attempts: number }>(
+      'select check_attempts from public.responses where attempt_id = $1 and question_id = $2',
+      [attemptId, q1.id],
+    )
+    expect(stableRow[0].check_attempts).toBe(2)
 
     await expect(checkResponse(attemptId, q2.id)).rejects.toThrow(
       /Answer the question/i,
     )
 
-    // The state exposes feedback only for checked questions.
-    await setSession('authenticated', studentOneId)
-    let partialState: {
-      responses: {
-        question_id: string
-        feedback: { is_correct: boolean; correct_options: string[] } | null
-      }[]
-    }
-    try {
-      partialState = await jsonRpc('get_attempt_state', [attemptId])
-    } finally {
-      await setSession('postgres')
-    }
-    const q1State = partialState.responses.find(
-      (response) => response.question_id === q1.id,
-    )
-    const q2State = partialState.responses.find(
-      (response) => response.question_id === q2.id,
-    )
-    expect(q1State?.feedback?.is_correct).toBe(false)
-    expect(q1State?.feedback?.correct_options).toEqual(['a'])
-    expect(q2State?.feedback ?? null).toBeNull()
-    expect(JSON.stringify(partialState)).not.toContain('Annual review')
+    // Short answers can also be retried, and only success reveals the key.
+    await saveAnswer(attemptId, q3.id, [], 'Something else entirely')
+    const shortWrong = await checkResponse(attemptId, q3.id)
+    expect(shortWrong.is_correct).toBe(false)
+    expect(shortWrong.awarded_marks).toBe(0)
+    expect(shortWrong.answer_key).toBeNull()
 
-    // Short answers are compared case- and whitespace-insensitively.
     await saveAnswer(attemptId, q3.id, [], '  ANNUAL   REVIEW  ')
     const shortCheck = await checkResponse(attemptId, q3.id)
     expect(shortCheck.is_correct).toBe(true)
@@ -1105,12 +1159,18 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
       saveAnswer(attemptId, q3.id, [], 'Something else entirely'),
     ).rejects.toThrow(/locked/i)
 
-    // Multi-select must match the full key, not a subset.
+    // Multi-select must match the full key, but a wrong check can be retried.
     await saveAnswer(attemptId, q2.id, ['x'], null)
     const partial = await checkResponse(attemptId, q2.id)
     expect(partial.is_correct).toBe(false)
     expect(partial.awarded_marks).toBe(0)
-    expect(partial.correct_options).toEqual(['x', 'y'])
+    expect(partial.correct_options).toEqual([])
+
+    await saveAnswer(attemptId, q2.id, ['x', 'y'], null)
+    const full = await checkResponse(attemptId, q2.id)
+    expect(full.is_correct).toBe(true)
+    expect(full.awarded_marks).toBe(2)
+    expect(full.correct_options).toEqual(['x', 'y'])
 
     await setSession('authenticated', studentOneId)
     try {
@@ -1119,7 +1179,7 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
         [attemptId],
       )
       expect(submitted[0].status).toBe('graded')
-      expect(Number(submitted[0].score)).toBe(3)
+      expect(Number(submitted[0].score)).toBe(7)
       await expect(checkResponse(attemptId, q1.id)).rejects.toThrow(
         /no longer open/i,
       )
@@ -1199,7 +1259,7 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
     }
   })
 
-  it('requires every grid row before checking and reveals the grid key', async () => {
+  it('requires every grid row before checking and only reveals the grid key on success', async () => {
     const assignmentRows = await query<{ id: string }>(
       `select id from public.test_assignments where test_id = $1 and student_id = $2`,
       [testHId, studentOneId],
@@ -1224,11 +1284,102 @@ describe('PWCI database, RLS and assessment lifecycle', () => {
     expect(wrong.is_correct).toBe(false)
     expect(wrong.awarded_marks).toBe(0)
     expect(wrong.marks).toBe(3)
-    expect(wrong.correct_options).toEqual(['v1:shut', 'v2:shut'])
+    expect(wrong.correct_options).toEqual([])
+
+    // A wrong grid stays editable; the correct grid reveals the key and locks.
+    await saveAnswer(attemptId, questionId, ['v1:shut', 'v2:shut'], null)
+    const right = await checkResponse(attemptId, questionId)
+    expect(right.is_correct).toBe(true)
+    expect(right.awarded_marks).toBe(3)
+    expect(right.correct_options).toEqual(['v1:shut', 'v2:shut'])
 
     await expect(
-      saveAnswer(attemptId, questionId, ['v1:shut', 'v2:shut'], null),
+      saveAnswer(attemptId, questionId, ['v1:open', 'v2:open'], null),
     ).rejects.toThrow(/locked/i)
+  })
+
+  it('accepts a range of short answers and compares numbers by value', async () => {
+    const testId = await createPublishedTest({
+      title: 'Answer range practice',
+      showResults: true,
+      attemptLimit: 4,
+      questions: [
+        {
+          type: 'short_answer',
+          prompt: 'What is the value?',
+          marks: 2,
+          answerKey: '0.12',
+          answerAliases: ['0.1', '0.128'],
+        },
+      ],
+    })
+    await assignTest(testId, [studentOneId])
+
+    const assignmentRows = await query<{ id: string }>(
+      `select id from public.test_assignments where test_id = $1 and student_id = $2`,
+      [testId, studentOneId],
+    )
+    const questionRows = await query<{ id: string }>(
+      `select q.id from public.questions q
+       join public.sections s on s.id = q.section_id
+       where s.test_id = $1`,
+      [testId],
+    )
+    const questionId = questionRows[0].id
+
+    const cases = [
+      { answer: '0.120', expected: 2 },
+      { answer: ' 0.1 ', expected: 2 },
+      { answer: '0.128', expected: 2 },
+      { answer: '0.13', expected: 0 },
+    ]
+
+    let firstAttemptId = ''
+    for (const testCase of cases) {
+      const attemptId = await startAttempt(assignmentRows[0].id)
+      if (!firstAttemptId) firstAttemptId = attemptId
+      await saveAnswer(attemptId, questionId, [], testCase.answer)
+      await setSession('authenticated', studentOneId)
+      try {
+        const submitted = await query<{ status: string; score: string }>(
+          'select status::text, score::text from public.submit_attempt($1)',
+          [attemptId],
+        )
+        expect(submitted[0].status).toBe('graded')
+        expect(Number(submitted[0].score)).toBe(testCase.expected)
+      } finally {
+        await setSession('postgres')
+      }
+    }
+
+    // The accepted alternatives are visible on the result for staff and student.
+    await setSession('authenticated', studentOneId)
+    let review: {
+      sections: { questions: { answer_aliases: string[] }[] }[]
+    }
+    try {
+      review = await jsonRpc('get_attempt_review', [firstAttemptId])
+    } finally {
+      await setSession('postgres')
+    }
+    expect(review.sections[0].questions[0].answer_aliases).toEqual([
+      '0.1',
+      '0.128',
+    ])
+
+    await setSession('authenticated', adminId)
+    let detail: {
+      sections: { questions: { answer_aliases: string[] }[] }[]
+    }
+    try {
+      detail = await jsonRpc('get_admin_attempt_detail', [firstAttemptId])
+    } finally {
+      await setSession('postgres')
+    }
+    expect(detail.sections[0].questions[0].answer_aliases).toEqual([
+      '0.1',
+      '0.128',
+    ])
   })
 
   it('accepts wide grids and long option lists up to the imported-bank limits', async () => {

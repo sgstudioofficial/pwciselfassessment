@@ -53,9 +53,10 @@ export function QuestionCard({
   const gridRows = question.rows ?? []
   const currentAnswered = isAnswered(question, answer)
   const checked = Boolean(feedback)
-  const locked = disabled || checked
+  const correct = feedback?.is_correct === true
+  const locked = disabled || correct || checking
   const showCheckButton =
-    checkEnabled && !checked && (isMultiple || isShortAnswer || isGrid)
+    checkEnabled && !correct && (isMultiple || isShortAnswer || isGrid)
 
   const toggleOption = (optionId: string) => {
     if (locked) return
@@ -97,7 +98,9 @@ export function QuestionCard({
         .filter(Boolean)
         .join(' · ')
 
-  const correctGridMap = checked ? gridPairMap(feedback?.correct_options ?? []) : null
+  const correctGridMap = correct
+    ? gridPairMap(feedback?.correct_options ?? [])
+    : null
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-soft">
@@ -188,9 +191,11 @@ export function QuestionCard({
               />
               <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
                 <span>
-                  {checked
-                    ? 'This answer has been checked and is locked.'
-                    : 'Saved automatically as you type.'}
+                  {correct
+                    ? 'Correct — this answer is locked.'
+                    : checked
+                      ? 'Not quite — change your answer and check again.'
+                      : 'Saved automatically as you type.'}
                 </span>
                 <span>{answer.text.length.toLocaleString()} / 10,000</span>
               </div>
@@ -313,7 +318,7 @@ export function QuestionCard({
               {question.options.map((option, optionIndex) => {
                 const selected = answer.selected.includes(option.id)
                 const isCorrectOption =
-                  checked && feedback?.correct_options.includes(option.id)
+                  correct && feedback?.correct_options.includes(option.id)
                 const isWrongSelection = checked && selected && !isCorrectOption
                 return (
                   <button
@@ -381,15 +386,17 @@ export function QuestionCard({
               loading={checking}
               disabled={!currentAnswered || checking}
             >
-              Check answer
+              {checked ? 'Check again' : 'Check answer'}
             </Button>
             <span className="text-xs text-slate-400">
-              Once checked, this answer is locked.
+              {checked
+                ? 'Change your answer and check again — only a correct answer is locked.'
+                : 'You can check as many times as you need.'}
             </span>
           </div>
         ) : null}
 
-        {!checked && autoCheck && checking ? (
+        {autoCheck && checking && !correct ? (
           <p className="mt-3 text-xs text-slate-400">Checking your answer…</p>
         ) : null}
 
@@ -446,12 +453,18 @@ export function QuestionCard({
                     {feedback.explanation}
                   </p>
                 ) : null}
+
+                {!feedback.is_correct ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    Change your answer and check again.
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
         ) : null}
 
-        {currentAnswered && !checked ? (
+        {currentAnswered && !correct ? (
           <button
             type="button"
             onClick={() => onChange(isShortAnswer ? { text: '' } : { selected: [] })}

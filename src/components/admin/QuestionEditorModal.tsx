@@ -33,6 +33,7 @@ import {
   parseGridPair,
 } from '../../lib/grid'
 import { cn } from '../../lib/cn'
+import { formatAliases, parseAliases } from '../../lib/answerKey'
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
@@ -125,6 +126,7 @@ export function QuestionEditorModal({
   const [rows, setRows] = useState<GridRow[]>([])
   const [correctOptions, setCorrectOptions] = useState<string[]>([])
   const [answerKey, setAnswerKey] = useState('')
+  const [answerAliases, setAnswerAliases] = useState('')
   const [explanation, setExplanation] = useState('')
   const [imagePath, setImagePath] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -181,6 +183,7 @@ export function QuestionEditorModal({
     setRows(initialRows)
     setCorrectOptions(initialCorrect)
     setAnswerKey(question?.answer_key ?? '')
+    setAnswerAliases(formatAliases(question?.answer_aliases))
     setExplanation(question?.explanation ?? '')
     setImagePath(question?.image_path ?? null)
     setError(null)
@@ -510,6 +513,8 @@ export function QuestionEditorModal({
             ? rows.map((row) => ({ id: row.id, text: row.text.trim() }))
             : [],
         answer_key: type === 'short_answer' ? answerKey.trim() || null : null,
+        answer_aliases:
+          type === 'short_answer' ? parseAliases(answerAliases) : [],
         explanation: explanation.trim() || null,
         position: question?.position ?? nextPosition,
       }
@@ -702,20 +707,36 @@ export function QuestionEditorModal({
         </div>
 
         {type === 'short_answer' ? (
-          <Field
-            label="Model answer"
-            htmlFor="question-answer-key"
-            hint="Guidance for manual grading. Students see it only after submission, if results are enabled."
-          >
-            <Textarea
-              id="question-answer-key"
-              value={answerKey}
-              onChange={(event) => setAnswerKey(event.target.value)}
-              placeholder="Expected answer or key points…"
-              rows={3}
-              disabled={saving}
-            />
-          </Field>
+          <div className="space-y-4">
+            <Field
+              label="Model answer"
+              htmlFor="question-answer-key"
+              hint="Guidance for manual grading. Students see it only after submission, if results are enabled."
+            >
+              <Textarea
+                id="question-answer-key"
+                value={answerKey}
+                onChange={(event) => setAnswerKey(event.target.value)}
+                placeholder="Expected answer or key points…"
+                rows={3}
+                disabled={saving}
+              />
+            </Field>
+            <Field
+              label="Also accept"
+              htmlFor="question-answer-aliases"
+              hint="One accepted answer per line. Numeric answers are compared by value, so 0.120 matches 0.12."
+            >
+              <Textarea
+                id="question-answer-aliases"
+                value={answerAliases}
+                onChange={(event) => setAnswerAliases(event.target.value)}
+                placeholder={'0.128\n0.12\n0.1'}
+                rows={3}
+                disabled={saving}
+              />
+            </Field>
+          </div>
         ) : (
           <div>
             <div className="mb-2 flex items-center justify-between">
