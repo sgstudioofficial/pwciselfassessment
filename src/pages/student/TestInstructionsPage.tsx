@@ -310,9 +310,10 @@ export function TestInstructionsPage() {
                   Immediately after each answer
                 </span>
                 <span className="mt-1.5 block text-xs leading-5 text-slate-500">
-                  See the correct answer as soon as you choose an option. Each
-                  checked answer is locked. Short answers are checked with the
-                  “Check answer” button.
+                  See immediately whether each answer is correct. A wrong
+                  answer shows red and can be changed and checked again; the
+                  correct answer is revealed once you get it right. Short
+                  answers are checked with the “Check answer” button.
                 </span>
               </button>
             </div>
@@ -321,11 +322,11 @@ export function TestInstructionsPage() {
               <Alert
                 tone="warning"
                 className="mt-4"
-                title="Checked answers cannot be changed"
+                title="Retry until you get it right"
                 icon={<Zap className="h-4 w-4" />}
               >
-                Choose carefully: once an answer is revealed it is saved and
-                locked for this attempt.
+                A wrong answer is never locked — change it and check again. Only
+                a correct answer is final.
               </Alert>
             ) : null}
           </Panel>
